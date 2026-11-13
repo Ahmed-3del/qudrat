@@ -1,0 +1,6 @@
+ALTER TABLE `adminMessageRecipients` ADD CONSTRAINT `adminMessageRecipients_messageId_adminMessages_id_fk` FOREIGN KEY (`messageId`) REFERENCES `adminMessages`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `adminMessageRecipients` ADD CONSTRAINT `adminMessageRecipients_recipientAdminId_adminUsers_id_fk` FOREIGN KEY (`recipientAdminId`) REFERENCES `adminUsers`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `adminMessages` ADD CONSTRAINT `adminMessages_senderAdminId_adminUsers_id_fk` FOREIGN KEY (`senderAdminId`) REFERENCES `adminUsers`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `adminSessions` ADD CONSTRAINT `adminSessions_adminId_adminUsers_id_fk` FOREIGN KEY (`adminId`) REFERENCES `adminUsers`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `memberProgress` ADD CONSTRAINT `memberProgress_memberId_memberUsers_id_fk` FOREIGN KEY (`memberId`) REFERENCES `memberUsers`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `memberSessions` ADD CONSTRAINT `memberSessions_memberId_memberUsers_id_fk` FOREIGN KEY (`memberId`) REFERENCES `memberUsers`(`id`) ON DELETE cascade ON UPDATE no action;

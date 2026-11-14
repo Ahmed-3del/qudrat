@@ -39,8 +39,6 @@ import {
   EyeOff,
   X,
 } from "lucide-react";
-import ComplaintDialog from "@/components/ComplaintDialog";
-import { trpc } from "@/lib/trpc";
 import { doors, questionsForDoor, type Door, type Lesson, type Question } from "@/data/qudratData";
 import { lawCards, lawGroups } from "@/data/lawsData";
 import { doorZeroQuestions, doorZeroLessons, type DoorZeroQuestion } from "@/data/door0Data";
@@ -142,9 +140,8 @@ function QuestionVisual({ text }: { text: string }) {
 
 export default function Home() {
   const [showWelcome, setShowWelcome] = useState(true);
-  const [welcomeStep, setWelcomeStep] = useState<"intro" | "auth" | "gender" | "role">("intro");
-  const [adminLoginDetected, setAdminLoginDetected] = useState(false);
-  const [adminAccess, setAdminAccess] = useState(false);
+  const [welcomeStep, setWelcomeStep] = useState<"intro" | "gender">("intro");
+  const adminAccess = false;
   const [girlsMode, setGirlsMode] = useState(() => localStorage.getItem("sahlah-gender") === "girls");
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("sahlah-theme") === "dark");
   const [view, setView] = useState<View>("home");
@@ -162,43 +159,12 @@ export default function Home() {
   const [result, setResult] = useState<QuizResult | null>(null);
   const [muted, setMuted] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(false);
-  const [complaintOpen, setComplaintOpen] = useState(false);
-  const [preAuthComplaintOpen, setPreAuthComplaintOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const audioRef = useRef<AudioContext | null>(null);
   const timerRef = useRef<number | null>(null);
   const finishQuizRef = useRef<() => void>(() => undefined);
   const [timerSeconds, setTimerSeconds] = useState(50 * 60);
-  const memberMe = trpc.member.auth.me.useQuery();
-  const memberProgressQuery = trpc.member.progress.get.useQuery(undefined, { enabled: Boolean(memberMe.data) });
-  const memberProgressSave = trpc.member.progress.save.useMutation();
-  const adminMe = trpc.admin.auth.me.useQuery();
-  const trpcUtils = trpc.useUtils();
-  const memberLogout = trpc.member.auth.logout.useMutation({
-    onSuccess: async () => {
-      await Promise.all([memberMe.refetch(), adminMe.refetch()]);
-      await trpcUtils.member.auth.me.invalidate();
-      await trpcUtils.admin.auth.me.invalidate();
-      setProgress(loadProgress());
-      setProgressHydratedKey(null);
-      setShowWelcome(true);
-      setWelcomeStep("auth");
-      setAdminLoginDetected(false);
-      setAdminAccess(false);
-      setView("home");
-      setFavoritesView(false);
-      setPracticeQuestions([]);
-      setTestQuestions([]);
-      setResult(null);
-    },
-  });
-  const adminLogout = trpc.admin.auth.logout.useMutation({
-    onSuccess: async () => { await Promise.all([memberMe.refetch(), adminMe.refetch()]); await trpcUtils.member.auth.me.invalidate(); await trpcUtils.admin.auth.me.invalidate(); setProgress(loadProgress()); setProgressHydratedKey(null); setAdminAccess(false); setAdminLoginDetected(false); setShowWelcome(true); setWelcomeStep("auth"); setView("home"); },
-  });
-
-  const accountStorageKey = memberMe.data ? `sahlah-progress-member-${memberMe.data.id}` : adminMe.data ? `sahlah-progress-admin-${adminMe.data.id}` : STORAGE_KEY;
-  const [progressHydratedKey, setProgressHydratedKey] = useState<string | null>(null);
+  const accountStorageKey = STORAGE_KEY;
   const unlockedDoors = useMemo(() => adminAccess ? [true, true, true, true] : progress.completedPractice.map((_, index) => index === 0 || progress.completedPractice[index - 1]), [adminAccess, progress.completedPractice]);
   const currentDoor = doors[activeDoor] ?? doors[0];
   const currentLesson = currentDoor.lessons[activeLesson] ?? currentDoor.lessons[0];
@@ -210,22 +176,8 @@ export default function Home() {
   }, 0);
 
   useEffect(() => {
-    if (memberMe.data) {
-      if (memberProgressQuery.data === undefined) return;
-      setProgress((memberProgressQuery.data as Progress | null) ?? loadProgress(accountStorageKey));
-    } else {
-      setProgress(loadProgress(accountStorageKey));
-    }
-    setProgressHydratedKey(accountStorageKey);
-  }, [accountStorageKey, memberMe.data, memberProgressQuery.data]);
-
-  useEffect(() => {
-    if (progressHydratedKey !== accountStorageKey) return;
     localStorage.setItem(accountStorageKey, JSON.stringify(progress));
-    if (!memberMe.data) return;
-    const saveTimer = window.setTimeout(() => memberProgressSave.mutate({ data: JSON.stringify(progress) }), 250);
-    return () => window.clearTimeout(saveTimer);
-  }, [accountStorageKey, memberMe.data, progress, progressHydratedKey]);
+  }, [accountStorageKey, progress]);
 
   useEffect(() => {
     document.body.classList.toggle("dark-mode", darkMode);
@@ -424,7 +376,7 @@ export default function Home() {
             <button className={view === "stats" ? "active" : ""} onClick={() => navigate("stats")}><BarChart3 size={17} /> الإحصائيات</button>
           </nav>
           <button className="mobile-menu" onClick={() => setMobileNav((open) => !open)} aria-label="فتح القائمة"><Menu size={21} /></button>
-          <button className="theme-toggle" onClick={() => setDarkMode((value) => !value)} aria-label={darkMode ? "تفعيل المظهر النهاري" : "تفعيل المظهر الليلي"}>{darkMode ? <Sun size={17} /> : <Moon size={17} />}<span>{darkMode ? "نهاري" : "ليلي"}</span></button><button className="assistant-launch" onClick={() => setAssistantOpen(true)}><Bot size={17} /> مساعد سهلات</button><button className="logout-button" onClick={() => adminMe.data ? adminLogout.mutate() : memberMe.data ? memberLogout.mutate() : (() => { setShowWelcome(true); setWelcomeStep("auth"); })()} disabled={memberLogout.isPending || adminLogout.isPending}><LogOut size={16} /> {memberLogout.isPending || adminLogout.isPending ? "جاري الخروج..." : "تسجيل الخروج"}</button><div className="options-menu-wrap"><button className="options-trigger" onClick={() => setOptionsOpen((open) => !open)} aria-label="فتح خيارات الموقع" aria-expanded={optionsOpen}><Menu size={19} /></button>{optionsOpen && <div className="options-menu" dir="rtl"><button onClick={() => { setGirlsMode(false); setOptionsOpen(false); }}><span className="options-swatch options-swatch-boys" /> تغيير التصميم لأولاد</button><button onClick={() => { setGirlsMode(true); setOptionsOpen(false); }}><span className="options-swatch options-swatch-girls" /> تغيير التصميم لبنات</button>{(adminMe.data || adminAccess) && <button onClick={() => { window.location.href = "/admin" }}><LockKeyhole size={15} /> فتح لوحة الإدارة</button>}</div>}</div>
+          <button className="theme-toggle" onClick={() => setDarkMode((value) => !value)} aria-label={darkMode ? "تفعيل المظهر النهاري" : "تفعيل المظهر الليلي"}>{darkMode ? <Sun size={17} /> : <Moon size={17} />}<span>{darkMode ? "نهاري" : "ليلي"}</span></button><div className="options-menu-wrap"><button className="options-trigger" onClick={() => setOptionsOpen((open) => !open)} aria-label="فتح خيارات الموقع" aria-expanded={optionsOpen}><Menu size={19} /></button>{optionsOpen && <div className="options-menu" dir="rtl"><button onClick={() => { setGirlsMode(false); setOptionsOpen(false); }}><span className="options-swatch options-swatch-boys" /> تغيير التصميم لأولاد</button><button onClick={() => { setGirlsMode(true); setOptionsOpen(false); }}><span className="options-swatch options-swatch-girls" /> تغيير التصميم لبنات</button></div>}</div>
         </div>
       </header>
     );
@@ -519,51 +471,13 @@ export default function Home() {
   }
 
   if (showWelcome) {
-    if (memberMe.data && welcomeStep !== "role") return <ResumeAccountScreen name={memberMe.data.name} kind="student" onContinue={() => { setAdminAccess(false); setShowWelcome(false); }} onLogout={() => memberLogout.mutate()} />;
-    if (adminMe.data && welcomeStep !== "role") return <ResumeAccountScreen name={adminMe.data.name} kind="admin" onContinue={() => { setWelcomeStep("role"); }} onLogout={() => adminLogout.mutate()} />;
-    return welcomeStep === "intro" ? <><WelcomeScreen onEnter={() => setWelcomeStep("auth")} onComplaint={() => setPreAuthComplaintOpen(true)} />{preAuthComplaintOpen && <ComplaintDialog beforeAuth onClose={() => setPreAuthComplaintOpen(false)} />}</> : welcomeStep === "auth" ? <MemberAuthScreen onAuthenticated={async () => { await memberMe.refetch(); setWelcomeStep("gender"); }} onAdminAuthenticated={async () => { await adminMe.refetch(); setAdminLoginDetected(true); setWelcomeStep("gender"); }} /> : welcomeStep === "gender" ? <GenderScreen onChoose={(isGirls) => { setGirlsMode(isGirls); if (adminLoginDetected) setWelcomeStep("role"); else setShowWelcome(false); }} /> : <RoleChoice onAdmin={() => { setAdminAccess(true); setShowWelcome(false); }} onStudent={() => { setAdminAccess(false); setShowWelcome(false); }} />;
+    return welcomeStep === "intro" ? <WelcomeScreen onEnter={() => setWelcomeStep("gender")} /> : <GenderScreen onChoose={(isGirls) => { setGirlsMode(isGirls); setShowWelcome(false); }} />;
   }
-  return <div className="app-shell">{renderTopBar()}<main className="page-container">{favoritesView ? <FavoritesPage favorites={progress.favorites} onToggle={toggleFavorite} /> : <>{view === "home" && renderHome()}{view === "study" && renderStudy()}{view === "practice" && renderPractice()}{view === "test" && renderTest()}{view === "result" && renderResult()}{view === "stats" && <StatisticsPage progress={progress} />}</>}</main><footer className="footer"><span>سهلات · يسهل عليك القدرات</span><button className="footer-complaint" onClick={() => setComplaintOpen(true)}><MessageSquare size={14} /> إرسال شكوى أو ملحوظة</button><span>صُمّم ليكون هادئًا وواضحًا</span></footer>{assistantOpen && <AssistantPanel storageKey={accountStorageKey} onClose={() => setAssistantOpen(false)} />}{complaintOpen && <ComplaintDialog email={memberMe.data?.email ?? adminMe.data?.email ?? ""} onClose={() => setComplaintOpen(false)} />}</div>;
+  return <div className="app-shell">{renderTopBar()}<main className="page-container">{favoritesView ? <FavoritesPage favorites={progress.favorites} onToggle={toggleFavorite} /> : <>{view === "home" && renderHome()}{view === "study" && renderStudy()}{view === "practice" && renderPractice()}{view === "test" && renderTest()}{view === "result" && renderResult()}{view === "stats" && <StatisticsPage progress={progress} />}</>}</main><footer className="footer"><span>سهلات · يسهل عليك القدرات</span><span>صُمّم ليكون هادئًا وواضحًا</span></footer></div>;
 }
 
-function WelcomeScreen({ onEnter, onComplaint }: { onEnter: () => void; onComplaint: () => void }) {
-  return <main className="welcome-screen"><div className="welcome-glow welcome-glow-one" /><div className="welcome-glow welcome-glow-two" /><section className="welcome-card"><div className="welcome-logo-frame"><img src="/assets/taqdar-logo.jpg" alt="شعار سهلات" /></div><span className="welcome-overline">سهلات · يسهل عليك القدرات</span><h1>طريقك إلى <em>المئوية</em></h1><p className="welcome-dedication">مبرمج خصيصًا لـ <strong>د/ عماد الجزيري</strong></p><p className="welcome-credit">بكل حب، من إعداد <strong>مؤمن سعد</strong></p><button className="welcome-button" onClick={onEnter}>يلا بينا نجيب مئوية <ArrowLeft size={19} /></button><button className="welcome-admin-link" onClick={() => { window.location.href = "/admin" }}><LockKeyhole size={15} /> دخول المدير للوحة الإدارة</button><button className="welcome-complaint-link" onClick={onComplaint}><MessageSquare size={15} /> إرسال شكوى أو ملحوظة</button></section><div className="welcome-footer-note">ذاكر بهدوء · تدرب بذكاء · اختبر ثقتك</div></main>;
-}
-
-function ResumeAccountScreen({ name, kind, onContinue, onLogout }: { name: string; kind: "student" | "admin"; onContinue: () => void; onLogout: () => void }) {
-  return <main className="welcome-screen"><section className="welcome-card resume-account-card"><div className="welcome-logo-frame"><img src="/assets/taqdar-logo.jpg" alt="شعار سهلات" /></div><span className="welcome-overline">حساب محفوظ في سهلات</span><h1>أهلًا يا <em>{name}</em></h1><p>ده حسابك المحفوظ. يلا نكمل من حيث توقفت؟</p><p className="resume-account-kind">{kind === "admin" ? "حساب مدير / أدمن · كل الأبواب متاحة" : "حساب طالب · تقدمك ومفضلتك محفوظان"}</p><button className="welcome-button" onClick={onContinue}>يلا نكمل <ArrowLeft size={19} /></button><button className="resume-switch-account" onClick={onLogout}>تسجيل الخروج واستخدام حساب آخر</button></section></main>;
-}
-
-function AccountTypeChoice({ onStudent, onAdmin }: { onStudent: () => void; onAdmin: () => void }) {
-  return <main className="gender-screen"><div className="gender-card"><span className="welcome-overline">قبل البداية</span><h1>هتدخل <em>بأي حساب؟</em></h1><p>اختار نوع الدخول المناسب لك. حساب المدير يفتح لوحة الإدارة أو كل أبواب المذاكرة.</p><div className="gender-options"><button className="gender-option boys-option" onClick={onStudent}><span className="gender-badge">س</span><strong>دخول كطالب</strong><small>تسجيل أو دخول وحفظ تقدمك</small></button><button className="gender-option girls-option" onClick={onAdmin}><span className="bow" aria-hidden="true"><i /><i /><b /></span><strong>دخول كمدير / أدمن</strong><small>إدارة الموقع أو متابعة كل الأبواب</small></button></div></div></main>;
-}
-
-function MemberAuthScreen({ onAuthenticated, onAdminAuthenticated }: { onAuthenticated: () => void; onAdminAuthenticated: () => void }) {
-  const [mode, setMode] = useState<"login" | "signup">("login");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const me = trpc.member.auth.me.useQuery();
-  const login = trpc.member.auth.login.useMutation({ onSuccess: async () => { await me.refetch(); onAuthenticated(); } });
-  const signup = trpc.member.auth.signup.useMutation({ onSuccess: async () => { await me.refetch(); onAuthenticated(); } });
-  const loginAny = trpc.member.auth.loginAny.useMutation({ onSuccess: (result) => result.kind === "admin" ? onAdminAuthenticated() : onAuthenticated() });
-  const activeError = loginAny.error?.message || signup.error?.message;
-
-  if (me.data) return <main className="member-auth-screen"><section className="member-auth-card"><span className="member-auth-icon"><UserRound size={27} /></span><span className="welcome-overline">أهلًا بعودتك</span><h1>نكمل رحلة <em>المئوية؟</em></h1><p>حسابك مسجل باسم {me.data.name}. اختر التصميم المناسب لك ونبدأ.</p><button className="welcome-button" onClick={onAuthenticated}>اختيار التصميم <ArrowLeft size={18} /></button></section></main>;
-
-  function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (mode === "login") loginAny.mutate({ email: email.trim(), password });
-    else signup.mutate({ name: name.trim(), email: email.trim(), password });
-  }
-
-  const pending = loginAny.isPending || signup.isPending;
-  return <main className="member-auth-screen"><div className="welcome-glow welcome-glow-one" /><section className="member-auth-card"><span className="member-auth-icon">{mode === "signup" ? <UserRound size={27} /> : <LogIn size={27} />}</span><span className="welcome-overline">خطوتك الأولى في سهلات</span><h1>{mode === "signup" ? <>أنشئ <em>حسابك</em></> : <>سجل <em>دخولك</em></>}</h1><p>اكتب البريد وكلمة المرور؛ سيحدد الموقع تلقائيًا إن كان الحساب طالبًا أو مديرًا.</p><form className="member-auth-form" onSubmit={submit}>{mode === "signup" && <label><UserRound size={16} /> الاسم<input required value={name} onChange={(event) => setName(event.target.value)} placeholder="اكتب اسمك" maxLength={120} /></label>}<label><Mail size={16} /> البريد الإلكتروني<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" dir="ltr" autoComplete="email" /></label><label className="password-field"><KeyRound size={16} /> كلمة المرور<div><input required type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="٨ أحرف على الأقل" minLength={8} dir="ltr" autoComplete={mode === "signup" ? "new-password" : "current-password"} /><button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label>{activeError && <p className="auth-error">{activeError}</p>}<button className="welcome-button member-auth-submit" disabled={pending}>{pending ? "جارٍ التنفيذ..." : mode === "signup" ? "إنشاء الحساب والدخول" : "دخول"} <ArrowLeft size={18} /></button></form><button className="auth-secondary" onClick={() => setMode(mode === "login" ? "signup" : "login")}>{mode === "login" ? "ليس لديك حساب؟ سجّل الآن" : "لديك حساب؟ سجّل الدخول"}</button><small className="auth-privacy">نحفظ كلمات المرور بشكل آمن ولا نعرضها داخل لوحة الإدارة.</small></section></main>;
-}
-
-function RoleChoice({ onAdmin, onStudent }: { onAdmin: () => void; onStudent: () => void }) {
-  return <main className="gender-screen"><div className="gender-card"><span className="welcome-overline">تم التعرف على حساب إداري</span><h1>تحب تكمل <em>بأي وضع؟</em></h1><p>اختار طريقة المتابعة؛ كلا الخيارين يدخلك الموقع مباشرة، لكن المدير أو الأدمن يحصل على موقع مفتوح بالكامل.</p><div className="gender-options"><button className="gender-option boys-option" onClick={onAdmin}><span className="gender-badge">⌘</span><strong>كمدير / أدمن</strong><small>دخول الموقع مفتوح بكل الأبواب</small></button><button className="gender-option girls-option" onClick={onStudent}><span className="gender-badge">س</span><strong>كطالب</strong><small>دخول الموقع بنظام القفل الطبيعي</small></button></div></div></main>;
+function WelcomeScreen({ onEnter }: { onEnter: () => void }) {
+  return <main className="welcome-screen"><div className="welcome-glow welcome-glow-one" /><div className="welcome-glow welcome-glow-two" /><section className="welcome-card"><div className="welcome-logo-frame"><img src="/assets/taqdar-logo.jpg" alt="شعار سهلات" /></div><span className="welcome-overline">سهلات · يسهل عليك القدرات</span><h1>طريقك إلى <em>المئوية</em></h1><p className="welcome-dedication">مبرمج خصيصًا لـ <strong>د/ عماد الجزيري</strong></p><p className="welcome-credit">بكل حب، من إعداد <strong>مؤمن سعد</strong></p><button className="welcome-button" onClick={onEnter}>يلا بينا نجيب مئوية <ArrowLeft size={19} /></button></section><div className="welcome-footer-note">ذاكر بهدوء · تدرب بذكاء · اختبر ثقتك</div></main>;
 }
 
 function GenderScreen({ onChoose }: { onChoose: (girls: boolean) => void }) {
@@ -619,46 +533,6 @@ function ResultDoorAnalysis({ result }: { result: QuizResult }) {
   const strongest = attempted.reduce((best, row) => row.score > best.score ? row : best, attempted[0]);
   const weakest = attempted.reduce((worst, row) => row.score < worst.score ? row : worst, attempted[0]);
   return <section className="result-door-analysis"><div className="analysis-heading"><div><span className="section-kicker">قراءة أدق للنتيجة</span><h3>أداؤك في كل باب</h3></div><span>الصحيح والخطأ محسوبان من أسئلة هذه المحاولة</span></div>{attempted.length > 1 && <div className="analysis-highlights"><div><span>أقوى باب</span><b>الباب {arabicNumber(strongest.door.id)} · {arabicNumber(strongest.score)}٪</b><small>أحسنت، حافظ على مستواك هنا.</small></div><div><span>يحتاج مراجعة</span><b>الباب {arabicNumber(weakest.door.id)} · {arabicNumber(weakest.score)}٪</b><small>ابدأ بمراجعة دروس هذا الباب.</small></div></div>}<div className="result-door-list">{rows.map((row) => <div className={`result-door-row ${row.total === 0 ? "empty" : ""}`} key={row.door.id}><div className="result-door-title"><strong>الباب {arabicNumber(row.door.id)}</strong><span>{row.total ? `${arabicNumber(row.score)}٪` : "غير موجود في هذه المحاولة"}</span></div><div className="result-door-bar"><span style={{ width: `${row.score}%` }} /></div>{row.total > 0 && <div className="result-door-numbers"><span>صحيح <b>{arabicNumber(row.correct)}</b></span><span>خاطئ <b>{arabicNumber(row.wrong)}</b></span><span>غير مجاب <b>{arabicNumber(row.unanswered)}</b></span><span>إجمالي <b>{arabicNumber(row.total)}</b></span></div>}</div>)}</div></section>;
-}
-
-function AssistantPanel({ onClose, storageKey }: { onClose: () => void; storageKey: string }) {
-  type ChatMessage = { role: "user" | "assistant"; content: string; image?: string };
-  type ChatSession = { id: string; title: string; updatedAt: number; messages: Array<Pick<ChatMessage, "role" | "content">> };
-  const welcome: ChatMessage = { role: "assistant", content: "أهلًا بك في مساعد سهلات. اكتب سؤالك، ولو الصياغة فيها خطأ سأقول لك: هل تقصد كذا؟ أقدر أرجع لأسئلة الأبواب ٠ و١ و٢ و٣ وملخص القوانين." };
-  const historyKey = `sahlah-assistant-history:${storageKey}`;
-  const readHistory = (): ChatSession[] => { try { const value = JSON.parse(localStorage.getItem(historyKey) || "[]"); return Array.isArray(value) ? value.slice(0, 20) : []; } catch { return []; } };
-  const initialHistory = typeof window === "undefined" ? [] : readHistory();
-  const [sessions, setSessions] = useState<ChatSession[]>(initialHistory);
-  const [activeSessionId, setActiveSessionId] = useState(initialHistory[0]?.id ?? "current");
-  const [question, setQuestion] = useState("");
-  const [image, setImage] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>(initialHistory[0]?.messages.length ? initialHistory[0].messages : [welcome]);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  function saveSession(nextMessages: ChatMessage[], id = activeSessionId) {
-    const saved: ChatSession = { id, title: nextMessages.find((item) => item.role === "user")?.content.slice(0, 42) || "محادثة جديدة", updatedAt: Date.now(), messages: nextMessages.filter((item) => !item.image).map(({ role, content }) => ({ role, content })) };
-    setSessions((current) => { const next = [saved, ...current.filter((item) => item.id !== id)].slice(0, 20); localStorage.setItem(historyKey, JSON.stringify(next)); return next; });
-  }
-  function startNewChat() { const id = `${Date.now()}`; setActiveSessionId(id); setMessages([welcome]); setQuestion(""); setImage(null); setHistoryOpen(false); }
-  function openSession(session: ChatSession) { setActiveSessionId(session.id); setMessages(session.messages); setQuestion(""); setImage(null); setHistoryOpen(false); }
-  const [loading, setLoading] = useState(false);
-  async function solve() {
-    if (!question.trim() && !image) return;
-    const userMessage: ChatMessage = { role: "user", content: question.trim() || "حلل الصورة المرفقة.", image: image ?? undefined };
-    const nextMessages = [...messages, userMessage];
-    setMessages(nextMessages); saveSession(nextMessages); setQuestion(""); setImage(null); setLoading(true);
-    try {
-      const response = await fetch("/api/ai/solve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: nextMessages.map(({ role, content }) => ({ role, content })), image: userMessage.image }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "تعذر الاتصال بالمساعد");
-      setMessages((current) => { const next = [...current, { role: "assistant" as const, content: data.answer || "لم يصل حل واضح، حاول إرسال السؤال بصورة أوضح." }]; saveSession(next); return next; });
-    } catch (error) { setMessages((current) => { const next = [...current, { role: "assistant" as const, content: error instanceof Error ? error.message : "حدث خطأ غير متوقع." }]; saveSession(next); return next; }); }
-    finally { setLoading(false); }
-  }
-  function chooseImage(file?: File) {
-    if (!file) return;
-    const reader = new FileReader(); reader.onload = () => setImage(String(reader.result)); reader.readAsDataURL(file);
-  }
-  return <div className="assistant-backdrop" onClick={onClose}><section className="assistant-panel" onClick={(event) => event.stopPropagation()}><div className="assistant-head"><div><span className="section-kicker">مساعد سهلات</span><h2><Bot size={21} /> محادثة حل الأسئلة</h2></div><div className="assistant-head-actions"><button className="assistant-history-button" onClick={() => setHistoryOpen((value) => !value)}>سجل المحادثات</button><button className="assistant-close" onClick={onClose}>×</button></div></div>{historyOpen && <div className="assistant-history"><div><b>المحادثات المحفوظة</b><button className="button button-quiet" onClick={startNewChat}>محادثة جديدة</button></div>{sessions.length === 0 ? <p>لا توجد محادثات محفوظة بعد.</p> : sessions.map((session) => <button key={session.id} className={session.id === activeSessionId ? "active" : ""} onClick={() => openSession(session)}>{session.title}<small>{new Intl.DateTimeFormat("ar-EG", { dateStyle: "short", timeStyle: "short" }).format(session.updatedAt)}</small></button>)}</div>}<p className="assistant-note">اتكلم مع المساعد خطوة بخطوة، واسأله عن أي سؤال أو قانون من الملفات.</p><div className="assistant-chat" aria-live="polite">{messages.map((message, index) => <div className={`assistant-message ${message.role}`} key={`${message.role}-${index}`}><span className="assistant-message-label">{message.role === "assistant" ? "مساعد سهلات" : "أنت"}</span>{message.image && <img src={message.image} alt="الصورة المرفقة في السؤال" />}{message.role === "assistant" && <strong>التحليل</strong>}<p>{message.content}</p></div>)}{loading && <div className="assistant-message assistant"><span className="assistant-message-label">مساعد سهلات</span><p>براجع السؤال والملفات...</p></div>}</div><textarea value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="اكتب رسالتك أو صحح لي سؤالًا غير واضح..." onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); solve(); } }} /><div className="assistant-actions"><label className="button button-quiet"><ImagePlus size={17} /> رفع صورة<input type="file" accept="image/*" hidden onChange={(event) => chooseImage(event.target.files?.[0])} /></label>{image && <span className="image-ready">تم إرفاق الصورة</span>}<button className="button button-primary" onClick={solve} disabled={loading || (!question.trim() && !image)}>{loading ? "جاري التحليل..." : "إرسال"} <Send size={16} /></button></div></section></div>;
 }
 
 function ShieldIcon() { return <span className="shield-mini">✓</span>; }
